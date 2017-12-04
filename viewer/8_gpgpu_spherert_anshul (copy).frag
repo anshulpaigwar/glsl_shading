@@ -1,7 +1,7 @@
 #version 410
 #define M_PI 3.14159265358979323846
 #define air 1.00
-#define glass 2.500
+#define glass 2.00
 #define BOUNCE 5
 
 uniform mat4 mat_inverse;
@@ -11,7 +11,7 @@ uniform vec3 center;
 uniform float radius;
 
 //const vec4 camera_coord = vec4(0.0, 10.0, 5.0, 0.0);
-//const vec3 light_coord = vec3(10.0, 10.0, 5.0);
+const vec3 light_coord = vec3(10.0, 10.0, 5.0);
 
 
 uniform float roughness = 0.6;
@@ -40,6 +40,11 @@ struct Light {
 };
 
 
+// float atan2(in float y, in float x)
+// {
+//     bool s = (abs(x) > abs(y));
+//     return mix(M_PI/2.0 - atan(x,y), atan(y,x), s);
+// }
 
 
 vec4 getColorFromEnvironment(in vec3 direction)
@@ -49,25 +54,25 @@ vec4 getColorFromEnvironment(in vec3 direction)
     float lat = acos(direction.z/ sphereRadius); //theta
     float lon = atan(direction.y , direction.x); //phi
 
-    vec2 coord = vec2(lon/(2*M_PI) +0.5, lat/M_PI);
+    vec2 coord = vec2(lon/M_PI, lat/M_PI);
     return vec4(texture2D(envMap,coord));
+    // return vec4(texture2D(envMap,direction.xy));
 }
-
-
-
-
-
 
 
 
 bool raySphereIntersect(in vec3 start, in vec3 direction, inout vec3 newPoint) {
 
+    // equation of sphere p^2 - R^2 =0            where  P = (x,y,z)
+    // p = o + t.D -C                           we have to find t
+    // cp = O-C
+    // (tD)^2 + 2t.D.CP + CP^2 - R^2 = 0
     vec3 CP = start - center;
     float a = dot(direction, direction);
     float b = 2*dot(direction,CP);
     float c = dot(CP,CP) - (radius * radius);
 
-    float disc = pow(b,2) - 4 * a * c; // determinant
+    float disc = pow(b,2) - 4 * a * c;
     float t;
 
 
@@ -112,58 +117,42 @@ bool raySphereIntersect(in vec3 start, in vec3 direction, inout vec3 newPoint) {
 
     newPoint = start + t * direction;
     return true;
-
-
-
 }
 
 
 
 
 
+float difuse_light(in vec3 vertNormal, in vec3 lightVector) {
+    return  max(dot(normalize(vertNormal), normalize(lightVector)),0.0);
+}
+
+float specular_light(in vec3 vertNormal, in vec3 lightVector, in vec3 eyeVector)
+{
+    vec3 halfVector  = normalize(normalize(eyeVector) + normalize(lightVector));
+
+    float cos_angle = (dot(halfVector,lightVector))/(length(halfVector)*length(lightVector));
+
+    float ci = pow(eta*eta -1 + pow(cos_angle, 2), 0.5);
+
+    float Fs = pow((cos_angle - ci)/(cos_angle + ci),2);
+    float Fp = pow((eta* eta* cos_angle - ci)/(eta* eta* cos_angle + ci),2);
+
+    float Fresnel_coeff = 0.5*(Fs + Fp);
+
+    return Fresnel_coeff * pow(max(dot(normalize(vertNormal), halfVector),0.0),shininess);
+
+
+}
 
 
 
-// float difuse_light(in vec3 vertNormal, in vec3 lightVector) {
-//     return  max(dot(normalize(vertNormal), normalize(lightVector)),0.0);
-// }
-//
-// float specular_light(in vec3 vertNormal, in vec3 lightVector, in vec3 eyeVector)
-// {
-//     vec3 halfVector  = normalize(normalize(eyeVector) + normalize(lightVector));
-//
-//     float cos_angle = (dot(halfVector,lightVector))/(length(halfVector)*length(lightVector));
-//
-//     float ci = pow(eta*eta -1 + pow(cos_angle, 2), 0.5);
-//
-//     float Fs = pow((cos_angle - ci)/(cos_angle + ci),2);
-//     float Fp = pow((eta* eta* cos_angle - ci)/(eta* eta* cos_angle + ci),2);
-//
-//     float Fresnel_coeff = 0.5*(Fs + Fp);
-//
-//     return Fresnel_coeff * pow(max(dot(normalize(vertNormal), halfVector),0.0),shininess);
-//
-//
-// }
-
-
-
-
-
-
-
-
-float fresnel (vec3 normal, vec3 light, float eta2)
+float fresnel (vec3 normal, vec3 light, float eta)
 {
 
-    float f0 = pow((1-eta2)/(1+eta2),2);
-    float ret = (f0+(1-f0)*(pow( 1- dot(normal, light)  ,5)));
-    // return 1.04 - ret*(.04);
-    return (eta + (1.0-eta) * ret);
+    float f0 = pow((1-eta)/(1+eta),2);
+    return (f0+(1-f0)*(pow( 1- dot(normal, light)  ,5)));
 }
-
-
-
 
 
 
@@ -193,20 +182,28 @@ if(!transparent)
 
      if(raySphereIntersect(eye, u, intersect_point)){
         vec3 vertNormal = normalize(intersect_point - center);
-        colour =  getColorFromEnvironment(normalize(reflect(u, vertNormal)));
-        }
+        //vec3 lightVector = normalize(light_coord-intersect_point);
+        //vec3 eyeVector = normalize(eye - intersect_point);
+        // float dif = difuse_light(vertNormal, lightVector);
+        // float spec = specular_light(vertNormal, lightVector,eyeVector);
+
+        colour = getColorFromEnvironment(normalize(reflect(u, vertNormal)));
+        // colour = (normalize(ambient_ref_coeff) +  normalize(diffuse_ref_coeff) * dif  + normalize(specular_ref_coeff)* spec) * vertColor * lightIntensity;
+
+    }
     else{
 
         colour =  getColorFromEnvironment(u) ;
+        //gl_FragColor=clamp(color,0.0,1.0);
 
-        }
+     }
  }
  else  //refraction
  {
 
      if(raySphereIntersect(eye, u, intersect_point)){
          vec3 vertNormal = normalize(intersect_point - center);
-         Light light[BOUNCE];
+         Light light[6];
          for(int i = 1; i <BOUNCE; i++ ){ light[i].colour = vec4(0,0,0,0); light[i].fresnel = 0; }
          vec3 normal;
          vec3 direction;
@@ -221,7 +218,7 @@ if(!transparent)
          direction = normalize(refract(u, vertNormal, air/glass));
 
 
-         // raySphereIntersect(intersect_point +0.01*direction,direction, intersect_point2);
+         // raySphereIntersect(intersect_point,direction, intersect_point2);
          //
          //     normal = normalize(center - intersect_point2);
          //
@@ -234,8 +231,8 @@ if(!transparent)
          //
          //
          //     light[i].colour = getColorFromEnvironment(light[i].direction);
-         //     colour = (light[i].fresnel)*light[i].colour;
-             //colour = (light[0].fresnel)*light[0].colour + (1-light[0].fresnel)*colour;
+         //     colour = (1-light[i].fresnel)*light[i].colour;
+         //     colour = (light[i].fresnel)*light[0].colour + (1-light[i].fresnel)*colour;
 
 
 
@@ -243,9 +240,10 @@ if(!transparent)
 
 
 
-             // Calculate the direction of each ray and fresnel coefficient at each intersection point
-         for(int i = 1; i < BOUNCE; i++ ){
-             raySphereIntersect(intersect_point + direction*0.01,direction, intersect_point2); // addition of 0.01*direction so to shift our origin of ray so that we donot detect the same point of intersection.
+
+         for(int i = 1; i <=BOUNCE; i+=2 ){
+             raySphereIntersect(intersect_point,direction, intersect_point2);
+             intersect_point += direction*0.01;
              normal = normalize(center - intersect_point2);
              light[i].direction = normalize(refract(direction, normal, glass/air));
              light[i+1].direction = normalize(reflect(direction, normal));
@@ -255,18 +253,25 @@ if(!transparent)
              intersect_point = intersect_point2;
          }
 
-         //calculate the colour by adding it from refracted and reflected rays
-         for (int i=BOUNCE -1; i > 0; i--)
+         for(int i = BOUNCE; i >= 0; i-- )
          {
-           colour =  light[i].fresnel*getColorFromEnvironment(light[i].direction) + (1-light[i].fresnel)*colour;
+             if(i%2 == 1)
+                light[i].colour = getColorFromEnvironment(light[i].direction);
+             colour = (light[i].fresnel)*light[i].colour + (light[i].fresnel)*colour;
+             if(i == 0)
+                colour = (light[i].fresnel)*light[i].colour + (1-light[i].fresnel)*colour;
+
          }
+
+
+
 
 
     }
     else{
 
         colour =  getColorFromEnvironment(u) ;
-
+        //gl_FragColor=clamp(color,0.0,1.0);
 
      }
  }

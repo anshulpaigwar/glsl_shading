@@ -28,10 +28,10 @@ void main( void )
     vertNormal.xyz = normalize(normalMatrix * normal.xyz);
     vertNormal.w = 0.0;
 
-    eyeVector.xyz = normalize(light_coord.xyz-vertex.xyz);
+    eyeVector.xyz = normalize(camera_coord.xyz-vertex.xyz);
     eyeVector.w = 0.0;
 
-    lightVector.xyz = normalize(camera_coord.xyz - vertex.xyz);  //what are coordinates of camera and light
+    lightVector.xyz = normalize(light_coord.xyz - vertex.xyz);  //what are coordinates of camera and light
     lightVector.w = 0.0;
 
     gl_Position = perspective * matrix * vertex;

@@ -7,14 +7,15 @@
 
 uniform float lightIntensity;
 uniform bool blinnPhong;
+uniform bool test;
 uniform float shininess;
 uniform float eta;
 uniform sampler2D shadowMap;
 
 
 uniform float roughness = 0.6;
-const vec4 ambient_ref_coeff = vec4(0.2, 0.0, 0.0, 0.0);
-const vec4 diffuse_ref_coeff = vec4(0.6, 0.0, 0.0, 0.0);
+const vec4 ambient_ref_coeff = vec4(0.2, 0.20, 0.20, 0.0);
+const vec4 diffuse_ref_coeff = vec4(0.6, 0.30, 0.20, 0.0);
 
 
 
@@ -82,7 +83,8 @@ void main( void )
      }
 
 
-
-     //fragColor = vertColor;
-     fragColor = (ambient_light + difuse_light + specular_light);
+     // if(test)fragColor = vec4(1,0,0,0);
+     // //fragColor = vertColor;
+     // else
+        fragColor = (ambient_light + difuse_light + specular_light);
 }

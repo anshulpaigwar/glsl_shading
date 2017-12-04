@@ -44,6 +44,7 @@ public slots:
     void cookTorranceClicked();
     void blinnPhongClicked();
     void transparentClicked();
+    void testClicked();
     void opaqueClicked();
     void updateLightIntensity(int lightSliderValue);
     void updateShininess(int shininessSliderValue);
@@ -102,6 +103,7 @@ private:
     // Parameters controlled by UI
     bool blinnPhong;
     bool transparent;
+    bool test;
     float eta;
     float lightIntensity;
     float shininess;

@@ -26,7 +26,7 @@ glShaderWindow::glShaderWindow(QWindow *parent)
       g_vertices(0), g_normals(0), g_texcoords(0), g_colors(0), g_indices(0),
       gpgpu_vertices(0), gpgpu_normals(0), gpgpu_texcoords(0), gpgpu_colors(0), gpgpu_indices(0),
       environmentMap(0), texture(0), permTexture(0), pixels(0), mouseButton(Qt::NoButton), auxWidget(0),
-      isGPGPU(false), hasComputeShaders(false), blinnPhong(true), transparent(true), eta(1.5), lightIntensity(1.0f), shininess(50.0f), lightDistance(5.0f), groundDistance(0.78),
+      isGPGPU(false), hasComputeShaders(false), blinnPhong(true), transparent(true),test(true), eta(1.5), lightIntensity(1.0f), shininess(50.0f), lightDistance(5.0f), groundDistance(0.78),
       shadowMap_fboId(0), shadowMap_rboId(0), shadowMap_textureId(0), fullScreenSnapshots(false),
       m_indexBuffer(QOpenGLBuffer::IndexBuffer), ground_indexBuffer(QOpenGLBuffer::IndexBuffer)
 {
@@ -173,20 +173,33 @@ void glShaderWindow::openNewEnvMap() {
 void glShaderWindow::cookTorranceClicked()
 {
     blinnPhong = false;
+        test = false;
     renderNow();
 }
 
 void glShaderWindow::blinnPhongClicked()
 {
     blinnPhong = true;
+        test = false;
     renderNow();
 }
 
 void glShaderWindow::transparentClicked()
 {
     transparent = true;
+
     renderNow();
 }
+
+
+
+void glShaderWindow::testClicked()
+{
+    test = true;
+    renderNow();
+}
+
+
 
 void glShaderWindow::opaqueClicked()
 {
@@ -232,14 +245,19 @@ QWidget *glShaderWindow::makeAuxWindow()
     QGroupBox *groupBox = new QGroupBox("Specular Model selection");
     QRadioButton *radio1 = new QRadioButton("Blinn-Phong");
     QRadioButton *radio2 = new QRadioButton("Cook-Torrance");
-    if (blinnPhong) radio1->setChecked(true);
-    else radio1->setChecked(true);
+    QRadioButton *radio3 = new QRadioButton("test");
+    // if (blinnPhong) radio1->setChecked(true);
+    // else radio1->setChecked(true);
+    if (test) radio3->setChecked(true);
+    else radio3->setChecked(true);
     connect(radio1, SIGNAL(clicked()), this, SLOT(blinnPhongClicked()));
     connect(radio2, SIGNAL(clicked()), this, SLOT(cookTorranceClicked()));
+    connect(radio3, SIGNAL(clicked()), this, SLOT(testClicked()));
 
     QVBoxLayout *vbox = new QVBoxLayout;
     vbox->addWidget(radio1);
     vbox->addWidget(radio2);
+    vbox->addWidget(radio3);
     groupBox->setLayout(vbox);
     buttons->addWidget(groupBox);
 
@@ -1086,6 +1104,7 @@ void glShaderWindow::render()
         compute_program->setUniformValue("lightIntensity", 1.0f);
         compute_program->setUniformValue("blinnPhong", blinnPhong);
         compute_program->setUniformValue("transparent", transparent);
+        compute_program->setUniformValue("test", test);
         compute_program->setUniformValue("lightIntensity", lightIntensity);
         compute_program->setUniformValue("shininess", shininess);
         compute_program->setUniformValue("eta", eta);
@@ -1151,6 +1170,7 @@ void glShaderWindow::render()
     m_program->setUniformValue("lightIntensity", 1.0f);
     m_program->setUniformValue("blinnPhong", blinnPhong);
     m_program->setUniformValue("transparent", transparent);
+    m_program->setUniformValue("test", test);
     m_program->setUniformValue("lightIntensity", lightIntensity);
     m_program->setUniformValue("shininess", shininess);
     m_program->setUniformValue("eta", eta);
@@ -1180,6 +1200,7 @@ void glShaderWindow::render()
         ground_program->setUniformValue("lightIntensity", 1.0f);
         ground_program->setUniformValue("blinnPhong", blinnPhong);
         ground_program->setUniformValue("transparent", transparent);
+        ground_program->setUniformValue("test", test);
         ground_program->setUniformValue("lightIntensity", lightIntensity);
         ground_program->setUniformValue("shininess", shininess);
         ground_program->setUniformValue("eta", eta);
