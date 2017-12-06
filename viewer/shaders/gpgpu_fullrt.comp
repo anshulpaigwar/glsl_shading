@@ -15,6 +15,13 @@ uniform float radius;
 uniform float groundDistance;
 uniform vec3 center;
 
+
+// const vec4 ambient_ref_coeff = vec4(0.2, 0.20, 0.20, 0.0);
+// const vec4 diffuse_ref_coeff = vec4(0.6, 0.30, 0.20, 0.0);
+const float ambient_ref_coeff = 0.2;
+const float diffuse_ref_coeff = 0.6;
+
+#define M_PI 3.14159265358979323846
 #define MAX_SCENE_BOUNDS    10.0
 #define EPS                 0.000001
 
@@ -45,6 +52,52 @@ layout (std430, binding = 4) buffer Meshes
 };
 
 
+bool intersectGroundPlane(vec4 origin, vec4 dir, vec4 planePoint, vec4 planeNormal, out vec4 intersectionPoint)
+{
+
+  float denom = dot(dir, planeNormal);
+  if(denom > 0.0000001){
+        float lambda = dot(planePoint - origin, planeNormal )/denom;
+        intersectionPoint =  origin + lambda*dir;
+        // return true;
+
+        vec4 p = intersectionPoint - planePoint;
+        float d2 = dot(p, p);
+        return (sqrt(d2) <= 1000);
+  }
+  return false;
+}
+
+
+
+
+
+
+vec4 getColorFromEnvironment(in vec3 direction)
+{
+    float sphereRadius = length(direction);
+
+    float lat = acos(direction.z/ sphereRadius); //theta
+    float lon = atan(direction.y , direction.x); //phi
+
+    vec2 coord = vec2(lon/(2*M_PI) +0.5, lat/M_PI);
+    return vec4(texture2D(colorTexture,coord));
+}
+
+
+
+float fresnel (vec3 normal, vec3 light)
+{
+
+    float f0 = pow((1-eta)/(1+eta),2);
+    float ret = (f0+(1-f0)*(pow( 1- dot(normal, light)  ,5)));
+    // return 1.04 - ret*(.04);
+    return ret;
+}
+
+
+
+
 float difuse_light(in vec3 vertNormal, in vec3 lightVector) {
     return  max(dot(normalize(vertNormal), normalize(lightVector)),0.0);
 }
@@ -53,14 +106,15 @@ float specular_light(in vec3 vertNormal, in vec3 lightVector, in vec3 eyeVector)
 {
     vec3 halfVector  = normalize(normalize(eyeVector) + normalize(lightVector));
 
-    float cos_angle = (dot(halfVector,lightVector))/(length(halfVector)*length(lightVector));
+    // float cos_angle = (dot(halfVector,lightVector))/(length(halfVector)*length(lightVector));
+    //
+    // float ci = pow(eta*eta -1 + pow(cos_angle, 2), 0.5);
+    //
+    // float Fs = pow((cos_angle - ci)/(cos_angle + ci),2);
+    // float Fp = pow((eta* eta* cos_angle - ci)/(eta* eta* cos_angle + ci),2);
 
-    float ci = pow(eta*eta -1 + pow(cos_angle, 2), 0.5);
-
-    float Fs = pow((cos_angle - ci)/(cos_angle + ci),2);
-    float Fp = pow((eta* eta* cos_angle - ci)/(eta* eta* cos_angle + ci),2);
-
-    float Fresnel_coeff = 0.5*(Fs + Fp);
+    // float Fresnel_coeff = 0.5*(Fs + Fp);
+    float Fresnel_coeff = fresnel(vertNormal,lightVector);
 
     return Fresnel_coeff * pow(max(dot(normalize(vertNormal), halfVector),0.0),shininess);
 
@@ -70,82 +124,136 @@ float specular_light(in vec3 vertNormal, in vec3 lightVector, in vec3 eyeVector)
 
 
 
-bool intersectBoundingBox(vec4 origin, vec4 dir) {
-	// TODO
-	//
-    vec3 tmin = (bbmin - origin.xyz)/dir.xyz;
-	vec3 tmax =     (bbmax - origin.xyz)/dir.xyz;
 
-    float IN = max(min(min(tmin.x,tmin.y),tmin.z), min(min(tmax.x,tmax.y),tmax.z));
-    float OUT = min(max(max(tmin.x,tmin.y),tmin.z), max(max(tmax.x,tmax.y),tmax.z));
-    if(OUT > IN)
-        return true;
-    else
-        return false;
+
+
+
+
+bool intersectBoundingBox(vec4 origin, vec4 dir) {
+    vec3 t1 = (bbmin - origin.xyz)/dir.xyz;
+	vec3 t2 = (bbmax - origin.xyz)/dir.xyz;
+
+    float tmin = min(t1.x, t2.x);
+    float tmax = max(t1.x, t2.x);
+
+    tmin = max(tmin, min(t1.y, t2.y));
+    tmax = min(tmax, max(t1.y, t2.y));
+
+    tmin = max(tmin, min(t1.z, t2.z));
+    tmax = min(tmax, max(t1.z, t2.z));
+
+    return tmax >= tmin;
 }
+
+
+
 
 bool intersectTriangle(vec4 origin, vec4 dir, int ptr, out vec4 dist)
 {
-	// TODO
+
 	const float EPSILON = 0.0000001;
 	vec4 v0 = vertices[indices[ptr]];
     vec4 v1 = vertices[indices[ptr + 1]];
     vec4 v2 = vertices[indices[ptr + 2]];
 
-    vec3 t = v0.xyz - origin.xyz;
     vec3 e1 = v1.xyz - v0.xyz;
     vec3 e2 = v2.xyz - v0.xyz;
-    vec3 p = cross(dir.xyz , e2);
-    vec3 q = cross(t , e1);
-
-    float a = dot(p,e1);
-    if (a > -EPSILON && a < EPSILON)
+    vec3 h = cross (normalize(dir.xyz) ,e2);
+    float a = dot(e1,h);
+    if (abs(a) < EPSILON)
         return false;
+
     float f = 1.0/a;
 
-    float alpha  = dot(p,t)*f;
-    float beta = dot(q,dir.xyz)*f;
-
+    vec3 s = origin.xyz - v0.xyz;
+    float alpha  = dot(h,s)*f;
     if (alpha < 0.0 || alpha > 1.0)
         return false;
 
+    vec3 q = cross(s, e1);
+    float beta = dot(q,normalize(dir.xyz))*f;
     if (beta < 0.0 || beta + alpha > 1.0)
         return false;
 
     float lambda = dot(q,e2)*f;
 
-    dist = vec4(alpha,beta,1-alpha-beta,lambda);
-    // if (lambda > EPSILON) return true;
-    // else false;
-    return true;
 
-    // if (lambda > EPSILON) // ray intersection
-    // {
-    //     //vec4 IntersectionPoint = origin + dir * lambda;
-    //     dist = vec4(alpha,beta,1-alpha-beta,lambda);
-    //     return true;
-    // }
-    // else // This means that there is a line intersection but not a ray intersection.
-    //     return false;
+    if (lambda > EPSILON){
+        dist = vec4(alpha,beta,1-alpha-beta,lambda);
+        return true;
+    }
+    //else false;
+    // return true;
 }
+
+
+
 
 vec4 interpolateNormal(hitinfo_t h)
 {
-	// TODO
-    vec4 N0 = normalize(Normals[indices[ptr]]);
-    vec4 N1 = normalize(Normals[indices[ptr + 1]]);
-    vec4 N2 = normalize(Normals[indices[ptr + 2]]);
+    vec4 N0 = normalize(normals[indices[h.hit_vptr]]);
+    vec4 N1 = normalize(normals[indices[h.hit_vptr + 1]]);
+    vec4 N2 = normalize(normals[indices[h.hit_vptr + 2]]);
 
-    vec4 N_interpolate = normalize(h.t.x *N0 + h.t.y *N1 + h.t.z*N3);
+    vec4 N_interpolate = normalize(h.t.x *N0 + h.t.y *N1 + h.t.z*N2);
     return N_interpolate;
 }
 
-vec4 interpolateColor(hitinfo_t h)
+
+
+bool ifOccluded(vec4 origin, vec4 dir){
+    vec4 dist; // stores distance + barycentric coord
+    for(int j = 0; j < indices.length(); j += 3) {
+        if(intersectTriangle(origin, dir, j, dist)) {
+            return true;
+        }
+    }
+ return false;
+}
+
+
+
+
+
+
+
+vec4 interpolateColor( vec4 origin, vec4 dir, hitinfo_t h)
 {
 	// TODO
-	vec4 N = interpolateNormal(h);
-	return vec4(1);
+	vec4 intersectionPoint = origin + dir * h.t.w;
+	vec3 lightVector = normalize(lightPosition - intersectionPoint.xyz);
+    vec3 eyeVector =  normalize( origin.xyz- intersectionPoint.xyz);
+	vec4 vertNormal =  interpolateNormal(h);
+    vec4 dir2;
+    dir2.xyz = lightVector;
+    dir2.w = 0;
+
+    vec4 vertColor = vec4(1,0,0,0);
+    vec4 fragColor = vec4(0);
+    float diffuse = difuse_light( normalize(vertNormal.xyz), lightVector);
+
+    float specular = specular_light(vertNormal.xyz, lightVector, eyeVector);
+
+
+    if(!ifOccluded(intersectionPoint + dir2*0.1 , dir2)){
+
+        float specular = specular_light(vertNormal.xyz, lightVector, eyeVector);
+
+        fragColor = (ambient_ref_coeff + diffuse_ref_coeff * diffuse + specular)* vertColor * lightIntensity;
+        // fragColor = vec4(1);
+    }
+    else
+        fragColor = (ambient_ref_coeff )* vertColor * lightIntensity;
+        // fragColor = vec4(0);
+
+
+
+    return fragColor;
+    //return vec4(1);
 }
+
+
+
 
 bool isIntersected(vec4 origin, vec4 dir, out hitinfo_t h)
 {
@@ -173,17 +281,65 @@ vec4 trace(vec4 origin, vec4 dir)
 
     hitinfo_t h;
     if(isIntersected(origin,dir,h))
-        // return interpolateColor(h);
-        return vec4(1,0,0,0);
-  return vec4(0.50,0.50,0.50,0);
+        return interpolateColor(origin,dir,h);
+    else{
+
+           vec4 vertColor = vec4(1,0,0,0);
+           vec4 planePoint = vec4( 0,-groundDistance,0,0 );
+           vec4 planeNormal = normalize(vec4(0,1,0, 0));
+           vec4 intersectionPoint;
+           if(intersectGroundPlane(origin, dir, planePoint, planeNormal, intersectionPoint ))
+           {
+    	         vec3 lightVector = normalize(lightPosition - intersectionPoint.xyz);
+                 vec3 eyeVector =normalize( origin.xyz- intersectionPoint.xyz);
+                 vec4 dir2 = vec4(lightVector,0);
+                 // dir2.xyz = lightVector;
+                 // dir2.w = 0;
+
+
+                 vec4 fragColor = vec4(0);
+                 vertColor =  getColorFromEnvironment(dir.xyz);
+                 // vertColor =  vec4(0,1,0,0);
+
+                 float diffuse = difuse_light( normalize(planeNormal.xyz), lightVector);
+                 float specular = specular_light(planeNormal.xyz, lightVector, eyeVector);
+
+
+
+                 if(!ifOccluded(intersectionPoint, dir2)){
+
+                     float specular = specular_light(planeNormal.xyz, lightVector, eyeVector);
+
+                     fragColor = (ambient_ref_coeff + diffuse_ref_coeff * diffuse + specular)* vertColor * lightIntensity;
+                     // fragColor = vec4(0);
+                 }
+                 else
+                     fragColor = (ambient_ref_coeff)* vertColor * lightIntensity;
+                     // fragColor = vec4(0);
+
+
+                 return fragColor;
+
+        }
+        // return vec4(0.50,0.50,0.50,0);
+        return vec4(0);
+
+
+        //return vec4(1,0,0,0);
+  //return getColorFromEnvironment(dir.xyz) ;
 
     // vec4 dist;
     // for(int j = 0; j < indices.length(); j += 3) {
 	// 	if(intersectTriangle(origin, dir, j, dist))
 	// 		return vec4(1,0,0,0);
     // }
-    // return vec4(0.50,0.50,0.50,0);
+    }
+
 }
+
+
+
+
 
 
 layout (local_size_x = 8, local_size_y = 8) in;
